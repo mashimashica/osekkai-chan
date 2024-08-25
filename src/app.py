@@ -1,8 +1,8 @@
 import streamlit as st
 import numpy as np
-import matplotlib.pyplot as plt
 import networkx as nx
-# import japanize_matplotlib
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from packaging import version as Version
 
 class Agent:
@@ -74,64 +74,148 @@ class Model:
         support_rate = n_supported / n_needy if n_needy > 0 else 0
         return n_osekkai, n_needy, n_supported, support_rate
 
-    def visualize_network(self):
-        colors = []
-        for agent in self.agents:
-            if agent.is_osekkai:
-                colors.append('red')
-            elif agent.is_needy:
-                if agent.is_supported:
-                    colors.append('green')
-                else:
-                    colors.append('blue')
-            else:
-                colors.append('gray')
+    # def visualize_network(self):
+    #     colors = []
+    #     for agent in self.agents:
+    #         if agent.is_osekkai:
+    #             colors.append('red')
+    #         elif agent.is_needy:
+    #             if agent.is_supported:
+    #                 colors.append('green')
+    #             else:
+    #                 colors.append('blue')
+    #         else:
+    #             colors.append('gray')
 
-        fig, ax = plt.subplots(figsize=(12, 8))
-        pos = nx.spring_layout(self.network)
-        nx.draw(self.network, pos, node_color=colors, with_labels=False, node_size=30, ax=ax)
+    #     fig, ax = plt.subplots(figsize=(12, 8))
+    #     pos = nx.spring_layout(self.network)
+    #     nx.draw(self.network, pos, node_color=colors, with_labels=False, node_size=30, ax=ax)
 
-        ax.set_title('エージェントネットワークの可視化')
-        legend_elements = [plt.Line2D([0], [0], marker='o', color='w', label='おせっかいさん',
-                                      markerfacecolor='red', markersize=10),
-                           plt.Line2D([0], [0], marker='o', color='w', label='支援を受けている困窮者',
-                                      markerfacecolor='green', markersize=10),
-                           plt.Line2D([0], [0], marker='o', color='w', label='支援を受けていない困窮者',
-                                      markerfacecolor='blue', markersize=10),
-                           plt.Line2D([0], [0], marker='o', color='w', label='その他',
-                                      markerfacecolor='gray', markersize=10)]
-        ax.legend(handles=legend_elements, loc='upper right')
-        plt.tight_layout()
-        return fig
+    #     ax.set_title('エージェントネットワークの可視化')
+    #     legend_elements = [plt.Line2D([0], [0], marker='o', color='w', label='おせっかいさん',
+    #                                   markerfacecolor='red', markersize=10),
+    #                        plt.Line2D([0], [0], marker='o', color='w', label='支援を受けている困窮者',
+    #                                   markerfacecolor='green', markersize=10),
+    #                        plt.Line2D([0], [0], marker='o', color='w', label='支援を受けていない困窮者',
+    #                                   markerfacecolor='blue', markersize=10),
+    #                        plt.Line2D([0], [0], marker='o', color='w', label='その他',
+    #                                   markerfacecolor='gray', markersize=10)]
+    #     ax.legend(handles=legend_elements, loc='upper right')
+    #     plt.tight_layout()
+    #     return fig
 
 def run_simulation(n_agents, osekkai_rate, needy_rate, support_rate, needy_transition_rate, steps):
     model = Model(n_agents, osekkai_rate, needy_rate, support_rate, needy_transition_rate)
     history = model.run(steps)
     return model, history
 
-def visualize_results(history):
+# def visualize_results(history):
+#     osekkai, needy, supported, support_rates = zip(*history)
+    
+#     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))
+
+#     ax1.plot(osekkai, label='おせっかいさん')
+#     ax1.plot(needy, label='困窮者')
+#     ax1.plot(supported, label='支援を受けている人')
+#     ax1.set_xlabel('ステップ')
+#     ax1.set_ylabel('エージェント数')
+#     ax1.set_title('エージェントの状態の変化')
+#     ax1.legend()
+#     ax1.grid(True)
+
+#     ax2.plot(support_rates, label='支援率', color='purple')
+#     ax2.set_xlabel('ステップ')
+#     ax2.set_ylabel('支援率')
+#     ax2.set_title('困窮者のうち支援を受けている人の割合')
+#     ax2.legend()
+#     ax2.grid(True)
+
+#     plt.tight_layout()
+#     return fig
+
+def visualize_network_plotly(model):
+    pos = nx.spring_layout(model.network)
+    edge_x = []
+    edge_y = []
+    for edge in model.network.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        line=dict(width=0.5, color='#888'),
+        hoverinfo='none',
+        mode='lines')
+
+    node_x = []
+    node_y = []
+    for node in model.network.nodes():
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+
+    node_colors = []
+    for agent in model.agents:
+        if agent.is_osekkai:
+            node_colors.append('red')
+        elif agent.is_needy:
+            if agent.is_supported:
+                node_colors.append('green')
+            else:
+                node_colors.append('blue')
+        else:
+            node_colors.append('gray')
+
+    node_trace = go.Scatter(
+        x=node_x, y=node_y,
+        mode='markers',
+        hoverinfo='text',
+        marker=dict(
+            showscale=False,
+            color=node_colors,
+            size=10,
+            line_width=2))
+
+    fig = go.Figure(data=[edge_trace, node_trace],
+                    layout=go.Layout(
+                        title='エージェントネットワークの可視化',
+                        titlefont_size=16,
+                        showlegend=False,
+                        hovermode='closest',
+                        margin=dict(b=20,l=5,r=5,t=40),
+                        annotations=[ dict(
+                            text="",
+                            showarrow=False,
+                            xref="paper", yref="paper",
+                            x=0.005, y=-0.002 ) ],
+                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False))
+                    )
+    
+    return fig
+
+
+def visualize_results_plotly(history):
     osekkai, needy, supported, support_rates = zip(*history)
     
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))
-
-    ax1.plot(osekkai, label='おせっかいさん')
-    ax1.plot(needy, label='困窮者')
-    ax1.plot(supported, label='支援を受けている人')
-    ax1.set_xlabel('ステップ')
-    ax1.set_ylabel('エージェント数')
-    ax1.set_title('エージェントの状態の変化')
-    ax1.legend()
-    ax1.grid(True)
-
-    ax2.plot(support_rates, label='支援率', color='purple')
-    ax2.set_xlabel('ステップ')
-    ax2.set_ylabel('支援率')
-    ax2.set_title('困窮者のうち支援を受けている人の割合')
-    ax2.legend()
-    ax2.grid(True)
-
-    plt.tight_layout()
+    fig = make_subplots(rows=2, cols=1, subplot_titles=('エージェントの状態の変化', '困窮者のうち支援を受けている人の割合'))
+    
+    fig.add_trace(go.Scatter(y=osekkai, mode='lines', name='おせっかいさん', line=dict(color='red')), row=1, col=1)
+    fig.add_trace(go.Scatter(y=needy, mode='lines', name='困窮者', line=dict(color='blue')), row=1, col=1)
+    fig.add_trace(go.Scatter(y=supported, mode='lines', name='支援を受けている人', line=dict(color='green')), row=1, col=1)
+    
+    fig.add_trace(go.Scatter(y=support_rates, mode='lines', name='支援率', line=dict(color='purple')), row=2, col=1)
+    
+    fig.update_xaxes(title_text='ステップ', row=1, col=1)
+    fig.update_xaxes(title_text='ステップ', row=2, col=1)
+    fig.update_yaxes(title_text='エージェント数', row=1, col=1)
+    fig.update_yaxes(title_text='支援率', row=2, col=1)
+    
+    fig.update_layout(height=800, width=800, title_text='シミュレーション結果')
     return fig
+
 
 st.title('エージェントベースモデル: おせっかいさんと困窮者')
 
@@ -145,8 +229,8 @@ steps = st.slider('シミュレーションステップ', 10, 500, 100, 10)
 if st.button('シミュレーション実行'):
     model, history = run_simulation(n_agents, osekkai_rate, needy_rate, support_rate, needy_transition_rate, steps)
     
-    st.pyplot(model.visualize_network())
-    st.pyplot(visualize_results(history))
+    st.plotly_chart(visualize_network_plotly(model))
+    st.plotly_chart(visualize_results_plotly(history))
     
     final_support_rate = history[-1][3]
     st.write(f"シミュレーション終了時の支援率: {final_support_rate:.2%}")
