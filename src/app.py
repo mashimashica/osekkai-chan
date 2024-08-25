@@ -4,6 +4,7 @@ import networkx as nx
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from packaging import version as Version
+from PIL import Image
 
 class Agent:
     def __init__(self, is_osekkai=False, is_needy=False, is_supported=False):
@@ -216,6 +217,18 @@ def visualize_results_plotly(history):
     fig.update_layout(height=800, width=800, title_text='シミュレーション結果')
     return fig
 
+# アプリケーションのタイトルの前に画像を配置
+col1, col2, col3 = st.columns([1,2,1])
+
+with col1:
+    st.write("")
+
+with col2:
+    image = Image.open('static/images/osekkai-chan.png')
+    st.image(image, width=150)  # 幅を150ピクセルに設定
+
+with col3:
+    st.write("")
 
 st.title('エージェントベースモデル: おせっかいさんと困窮者')
 
