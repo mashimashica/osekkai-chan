@@ -1,0 +1,3 @@
+venv/
+*.pyc
+__pycache__/large_file.name
