@@ -75,64 +75,11 @@ class Model:
         support_rate = n_supported / n_needy if n_needy > 0 else 0
         return n_osekkai, n_needy, n_supported, support_rate
 
-    # def visualize_network(self):
-    #     colors = []
-    #     for agent in self.agents:
-    #         if agent.is_osekkai:
-    #             colors.append('red')
-    #         elif agent.is_needy:
-    #             if agent.is_supported:
-    #                 colors.append('green')
-    #             else:
-    #                 colors.append('blue')
-    #         else:
-    #             colors.append('gray')
-
-    #     fig, ax = plt.subplots(figsize=(12, 8))
-    #     pos = nx.spring_layout(self.network)
-    #     nx.draw(self.network, pos, node_color=colors, with_labels=False, node_size=30, ax=ax)
-
-    #     ax.set_title('エージェントネットワークの可視化')
-    #     legend_elements = [plt.Line2D([0], [0], marker='o', color='w', label='おせっかいさん',
-    #                                   markerfacecolor='red', markersize=10),
-    #                        plt.Line2D([0], [0], marker='o', color='w', label='支援を受けている困窮者',
-    #                                   markerfacecolor='green', markersize=10),
-    #                        plt.Line2D([0], [0], marker='o', color='w', label='支援を受けていない困窮者',
-    #                                   markerfacecolor='blue', markersize=10),
-    #                        plt.Line2D([0], [0], marker='o', color='w', label='その他',
-    #                                   markerfacecolor='gray', markersize=10)]
-    #     ax.legend(handles=legend_elements, loc='upper right')
-    #     plt.tight_layout()
-    #     return fig
 
 def run_simulation(n_agents, osekkai_rate, needy_rate, support_rate, needy_transition_rate, steps):
     model = Model(n_agents, osekkai_rate, needy_rate, support_rate, needy_transition_rate)
     history = model.run(steps)
     return model, history
-
-# def visualize_results(history):
-#     osekkai, needy, supported, support_rates = zip(*history)
-    
-#     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))
-
-#     ax1.plot(osekkai, label='おせっかいさん')
-#     ax1.plot(needy, label='困窮者')
-#     ax1.plot(supported, label='支援を受けている人')
-#     ax1.set_xlabel('ステップ')
-#     ax1.set_ylabel('エージェント数')
-#     ax1.set_title('エージェントの状態の変化')
-#     ax1.legend()
-#     ax1.grid(True)
-
-#     ax2.plot(support_rates, label='支援率', color='purple')
-#     ax2.set_xlabel('ステップ')
-#     ax2.set_ylabel('支援率')
-#     ax2.set_title('困窮者のうち支援を受けている人の割合')
-#     ax2.legend()
-#     ax2.grid(True)
-
-#     plt.tight_layout()
-#     return fig
 
 def visualize_network_plotly(model):
     pos = nx.spring_layout(model.network)
@@ -198,24 +145,59 @@ def visualize_network_plotly(model):
     return fig
 
 
-def visualize_results_plotly(history):
+def visualize_comprehensive_simulation(history, n_agents):
     osekkai, needy, supported, support_rates = zip(*history)
+    steps = list(range(len(history)))
     
-    fig = make_subplots(rows=2, cols=1, subplot_titles=('エージェントの状態の変化', '困窮者のうち支援を受けている人の割合'))
+    fig = make_subplots(rows=2, cols=1, 
+                        subplot_titles=('エージェントの状態の推移', 'おせっ貝ちゃんと困窮者の割合'),
+                        vertical_spacing=0.2)
     
-    fig.add_trace(go.Scatter(y=osekkai, mode='lines', name='おせっかいさん', line=dict(color='red')), row=1, col=1)
-    fig.add_trace(go.Scatter(y=needy, mode='lines', name='困窮者', line=dict(color='blue')), row=1, col=1)
-    fig.add_trace(go.Scatter(y=supported, mode='lines', name='支援を受けている人', line=dict(color='green')), row=1, col=1)
+    # エージェントの状態の推移
+    fig.add_trace(go.Scatter(x=steps, y=osekkai, mode='lines', name='おせっ貝ちゃん', line=dict(color='red', width=2)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=steps, y=needy, mode='lines', name='困窮者', line=dict(color='blue', width=2)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=steps, y=supported, mode='lines', name='支援を受けている人', line=dict(color='green', width=2)), row=1, col=1)
     
-    fig.add_trace(go.Scatter(y=support_rates, mode='lines', name='支援率', line=dict(color='purple')), row=2, col=1)
+    # おせっ貝ちゃんと困窮者の割合
+    osekkai_ratio = [o / n_agents for o in osekkai]
+    needy_ratio = [n / n_agents for n in needy]
+    fig.add_trace(go.Scatter(x=steps, y=osekkai_ratio, mode='lines', name='おせっ貝ちゃんの割合', line=dict(color='red', width=2)), row=2, col=1)
+    fig.add_trace(go.Scatter(x=steps, y=needy_ratio, mode='lines', name='困窮者の割合', line=dict(color='blue', width=2)), row=2, col=1)
     
-    fig.update_xaxes(title_text='ステップ', row=1, col=1)
-    fig.update_xaxes(title_text='ステップ', row=2, col=1)
+    # レイアウトの設定
+    fig.update_layout(
+        height=800,
+        title={
+            'text': 'おせっ貝ちゃん増殖シミュレーション結果',
+            'y': 0.98,
+            'x': 0.5,
+            'xanchor': 'center',
+            'yanchor': 'top',
+            'font': {'size': 24}
+        },
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=10)
+        ),
+        margin=dict(l=60, r=60, t=100, b=60)
+    )
+    
+    fig.update_xaxes(title_text='ステップ')
     fig.update_yaxes(title_text='エージェント数', row=1, col=1)
-    fig.update_yaxes(title_text='支援率', row=2, col=1)
+    fig.update_yaxes(title_text='割合', row=2, col=1, tickformat='.1%')
     
-    fig.update_layout(height=800, width=800, title_text='シミュレーション結果')
+    # サブプロットのタイトルのフォントサイズを調整
+    for i in fig['layout']['annotations']:
+        i['font'] = dict(size=14)
+    
     return fig
+
+
 
 # アプリケーションのタイトルの前に画像を配置
 col1, col2, col3 = st.columns([1,2,1])
@@ -230,7 +212,57 @@ with col2:
 with col3:
     st.write("")
 
-st.title('エージェントベースモデル: おせっかいさんと困窮者')
+st.title('おせっ貝ちゃん増殖シミュレーション')
+
+st.markdown("""
+このシミュレーションでは、社会におけるおせっかいさん（支援者）と困窮者の相互作用をモデル化しています。
+各パラメータを調整して、どのように支援の広がり方が変化するかを観察できます。
+
+- **エージェント数**: シミュレーション内の総人数
+- **おせっかい率**: 初期状態でおせっかいさんである確率
+- **困窮者率**: 初期状態で困窮者である確率
+- **初期支援率**: 初期状態で支援を受けている困窮者の割合
+- **困窮化率**: 毎ステップで新たに困窮者になる確率
+- **シミュレーションステップ**: シミュレーションを実行する期間
+
+パラメータを設定し、「シミュレーション実行」ボタンをクリックしてシミュレーションを開始してください。
+""")
+
+with st.expander("シミュレーションの詳細説明を開く"):
+    st.markdown("""
+    ### シミュレーションの詳細
+
+    このシミュレーションは、社会におけるおせっかい（支援）行動の伝播と、その効果を模倣しています。
+
+    #### エージェントの種類
+    1. **おせっかいさん**：他者を支援する意欲のある個人
+    2. **困窮者**：支援を必要としている個人
+    3. **一般の人**：特別な状態にない個人
+
+    #### シミュレーションの流れ
+    1. 初期状態では、設定されたパラメータに基づいてエージェントが配置されます。
+    2. 各ステップで以下のプロセスが実行されます：
+       - 一般の人が一定確率で困窮者になる
+       - おせっかいさんが隣接する困窮者を支援する
+       - 支援を受けた困窮者が回復し、おせっかいさんになる可能性がある
+
+    #### パラメータの意味
+    - **エージェント数**：シミュレーション内の総人数。多いほど複雑な相互作用が観察できます。
+    - **おせっかい率**：初期状態でおせっかいさんである確率。高いほど支援が広がりやすくなります。
+    - **困窮者率**：初期状態で困窮者である確率。社会の初期状態の困難度を表します。
+    - **初期支援率**：初期状態で支援を受けている困窮者の割合。初期の支援体制の充実度を表します。
+    - **困窮化率**：毎ステップで新たに困窮者になる確率。社会の不安定さを表します。
+    - **シミュレーションステップ**：シミュレーションを実行する期間。長いほど長期的な傾向が観察できます。
+
+    #### 結果の解釈
+    - 時系列グラフ：各タイプのエージェント数の変化と支援率の推移を示しています。
+    - 最終支援率：シミュレーション終了時点での支援の行き渡り具合を示します。
+    - ネットワーク図：エージェント間の関係性と状態を視覚化しています。
+
+    このシミュレーションを通じて、小さな支援行動が社会全体にどのように影響を与えるかを観察し、
+    効果的な支援システムの構築に向けたヒントを得ることができます。
+    """)
+
 
 n_agents = st.slider('エージェント数', 100, 10000, 1000, 100)
 osekkai_rate = st.slider('おせっかい率', 0.001, 0.1, 0.005, 0.001)
@@ -239,11 +271,22 @@ support_rate = st.slider('初期支援率', 0.1, 0.5, 0.2, 0.1)
 needy_transition_rate = st.slider('困窮化率', 0.0001, 0.01, 0.001, 0.0001)
 steps = st.slider('シミュレーションステップ', 10, 500, 100, 10)
 
+
+# Streamlitアプリケーションの更新部分
 if st.button('シミュレーション実行'):
     model, history = run_simulation(n_agents, osekkai_rate, needy_rate, support_rate, needy_transition_rate, steps)
     
-    st.plotly_chart(visualize_network_plotly(model))
-    st.plotly_chart(visualize_results_plotly(history))
+    # 新しい包括的可視化関数を使用
+    st.plotly_chart(visualize_comprehensive_simulation(history, n_agents), use_container_width=True)
     
-    final_support_rate = history[-1][3]
-    st.write(f"シミュレーション終了時の支援率: {final_support_rate:.2%}")
+    # ネットワーク図は以前と同じ
+    st.plotly_chart(visualize_network_plotly(model), use_container_width=True)
+    
+    # 最終的な統計情報を表示
+    final_osekkai, final_needy, final_supported, final_support_rate = history[-1]
+    st.write(f"シミュレーション終了時の統計:")
+    st.write(f"- おせっ貝ちゃんの数: {final_osekkai} ({final_osekkai/n_agents:.2%})")
+    st.write(f"- 困窮者の数: {final_needy} ({final_needy/n_agents:.2%})")
+    st.write(f"- 支援を受けている人の数: {final_supported}")
+    st.write(f"- 支援率: {final_support_rate:.2%}")
+    st.write(f"- おせっ貝ちゃんの影響力: {final_supported/final_osekkai if final_osekkai > 0 else 0:.2f} 人/おせっ貝ちゃん")
