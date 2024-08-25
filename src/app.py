@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
 import japanize_matplotlib
+from packaging import version as Version
 
 class Agent:
     def __init__(self, is_osekkai=False, is_needy=False, is_supported=False):
