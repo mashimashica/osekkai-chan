@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from packaging import version as Version
 from PIL import Image
+import time
 
 class Agent:
     def __init__(self, is_osekkai=False, is_needy=False, is_supported=False):
@@ -28,8 +29,12 @@ class Model:
         G = nx.Graph()
         G.add_nodes_from(range(n_agents))
         for i in range(n_agents):
-            n_edges = np.random.randint(1, 11)
+            max_new_edges = min(10 - G.degree(i), 10)  # 既存のエッジ数を考慮して、新しく追加できるエッジの最大数を計算
+            if max_new_edges <= 0:
+                continue
+            n_edges = np.random.randint(1, max_new_edges + 1)
             potential_neighbors = list(set(range(n_agents)) - set([i]) - set(G.neighbors(i)))
+            potential_neighbors = [j for j in potential_neighbors if G.degree(j) < 10]  # 次数が10未満のノードのみを選択
             if len(potential_neighbors) < n_edges:
                 n_edges = len(potential_neighbors)
             new_neighbors = np.random.choice(potential_neighbors, n_edges, replace=False)
@@ -38,10 +43,11 @@ class Model:
 
     def step(self):
         for i, agent in enumerate(self.agents):
-            if not agent.is_needy and not agent.is_osekkai:
+            if not agent.is_needy:
                 if np.random.random() < self.needy_transition_rate:
                     agent.is_needy = True
                     agent.is_supported = False
+                    agent.is_osekkai = False
             
             if agent.is_osekkai:
                 neighbors = list(self.network.neighbors(i))
@@ -81,67 +87,54 @@ def run_simulation(n_agents, osekkai_rate, needy_rate, support_rate, needy_trans
     history = model.run(steps)
     return model, history
 
-def visualize_network_plotly(model):
-    pos = nx.spring_layout(model.network)
-    edge_x = []
-    edge_y = []
-    for edge in model.network.edges():
-        x0, y0 = pos[edge[0]]
-        x1, y1 = pos[edge[1]]
-        edge_x.extend([x0, x1, None])
-        edge_y.extend([y0, y1, None])
+def visualize_rates_by_degree(model):
+    degrees = dict(model.network.degree())
+    osekkai_counts = {}
+    needy_counts = {}
+    supported_counts = {}
+    total_counts = {}
 
-    edge_trace = go.Scatter(
-        x=edge_x, y=edge_y,
-        line=dict(width=0.5, color='#888'),
-        hoverinfo='none',
-        mode='lines')
-
-    node_x = []
-    node_y = []
-    for node in model.network.nodes():
-        x, y = pos[node]
-        node_x.append(x)
-        node_y.append(y)
-
-    node_colors = []
-    for agent in model.agents:
+    for node, degree in degrees.items():
+        agent = model.agents[node]
+        if degree not in total_counts:
+            osekkai_counts[degree] = 0
+            needy_counts[degree] = 0
+            supported_counts[degree] = 0
+            total_counts[degree] = 0
+        
         if agent.is_osekkai:
-            node_colors.append('red')
-        elif agent.is_needy:
-            if agent.is_supported:
-                node_colors.append('green')
-            else:
-                node_colors.append('blue')
-        else:
-            node_colors.append('gray')
+            osekkai_counts[degree] += 1
+        if agent.is_needy:
+            needy_counts[degree] += 1
+        if agent.is_supported:
+            supported_counts[degree] += 1
+        total_counts[degree] += 1
 
-    node_trace = go.Scatter(
-        x=node_x, y=node_y,
-        mode='markers',
-        hoverinfo='text',
-        marker=dict(
-            showscale=False,
-            color=node_colors,
-            size=10,
-            line_width=2))
+    degrees = list(total_counts.keys())
+    osekkai_rates = [osekkai_counts[d] / total_counts[d] if total_counts[d] > 0 else 0 for d in degrees]
+    needy_rates = [needy_counts[d] / total_counts[d] if total_counts[d] > 0 else 0 for d in degrees]
+    supported_rates = [supported_counts[d] / total_counts[d] if total_counts[d] > 0 else 0 for d in degrees]
+    normal_rates = [1 - (osekkai_rates[i] + needy_rates[i] + supported_rates[i]) for i in range(len(degrees))]
 
-    fig = go.Figure(data=[edge_trace, node_trace],
-                    layout=go.Layout(
-                        title='エージェントネットワークの可視化',
-                        titlefont_size=16,
-                        showlegend=False,
-                        hovermode='closest',
-                        margin=dict(b=20,l=5,r=5,t=40),
-                        annotations=[ dict(
-                            text="",
-                            showarrow=False,
-                            xref="paper", yref="paper",
-                            x=0.005, y=-0.002 ) ],
-                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False))
-                    )
+    # 色を統一
+    colors = {'おせっ貝ちゃん': 'red', '困窮者': 'blue', '支援を受けている人': 'green', '通常': 'gray'}
     
+    fig = go.Figure(data=[
+        go.Bar(name='通常', x=degrees, y=normal_rates, marker_color=colors['通常']),
+        go.Bar(name='おせっかい', x=degrees, y=osekkai_rates, marker_color=colors['おせっ貝ちゃん']),
+        go.Bar(name='貧困', x=degrees, y=needy_rates, marker_color=colors['困窮者']),
+        go.Bar(name='被支援', x=degrees, y=supported_rates, marker_color=colors['支援を受けている人'])
+    ])
+
+    fig.update_layout(
+        title='ノード次数ごとの各状態の割合',
+        xaxis_title='ノード次数',
+        yaxis_title='割合',
+        yaxis_tickformat='.0%',
+        barmode='stack',
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
+    )
+
     return fig
 
 
@@ -153,16 +146,19 @@ def visualize_comprehensive_simulation(history, n_agents):
                         subplot_titles=('エージェントの状態の推移', 'おせっ貝ちゃんと困窮者の割合'),
                         vertical_spacing=0.2)
     
+    # 色を統一
+    colors = {'おせっ貝ちゃん': 'red', '困窮者': 'blue', '支援を受けている人': 'green', '通常': 'gray'}
+    
     # エージェントの状態の推移
-    fig.add_trace(go.Scatter(x=steps, y=osekkai, mode='lines', name='おせっ貝ちゃん', line=dict(color='red', width=2)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=steps, y=needy, mode='lines', name='困窮者', line=dict(color='blue', width=2)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=steps, y=supported, mode='lines', name='支援を受けている人', line=dict(color='green', width=2)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=steps, y=osekkai, mode='lines', name='おせっ貝ちゃん', line=dict(color=colors['おせっ貝ちゃん'], width=2)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=steps, y=needy, mode='lines', name='困窮者', line=dict(color=colors['困窮者'], width=2)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=steps, y=supported, mode='lines', name='支援を受けている人', line=dict(color=colors['支援を受けている人'], width=2)), row=1, col=1)
     
     # おせっ貝ちゃんと困窮者の割合
     osekkai_ratio = [o / n_agents for o in osekkai]
     needy_ratio = [n / n_agents for n in needy]
-    fig.add_trace(go.Scatter(x=steps, y=osekkai_ratio, mode='lines', name='おせっ貝ちゃんの割合', line=dict(color='red', width=2)), row=2, col=1)
-    fig.add_trace(go.Scatter(x=steps, y=needy_ratio, mode='lines', name='困窮者の割合', line=dict(color='blue', width=2)), row=2, col=1)
+    fig.add_trace(go.Scatter(x=steps, y=osekkai_ratio, mode='lines', name='おせっ貝ちゃんの割合', line=dict(color=colors['おせっ貝ちゃん'], width=2)), row=2, col=1)
+    fig.add_trace(go.Scatter(x=steps, y=needy_ratio, mode='lines', name='困窮者の割合', line=dict(color=colors['困窮者'], width=2)), row=2, col=1)
     
     # レイアウトの設定
     fig.update_layout(
@@ -213,6 +209,8 @@ with col3:
     st.write("")
 
 st.title('おせっ貝ちゃん増殖シミュレーション')
+# GitHubリポジトリへのリンクを追加
+st.markdown("[GitHub リポジトリ](https://github.com/mashimashica/osekkai-chan)")
 
 st.markdown("""
 このシミュレーションでは、社会におけるおせっかいさん（支援者）と困窮者の相互作用をモデル化しています。
@@ -254,18 +252,18 @@ with st.expander("シミュレーションの詳細説明を開く"):
     - **困窮化率**：毎ステップで新たに困窮者になる確率。社会の不安定さを表します。
     - **シミュレーションステップ**：シミュレーションを実行する期間。長いほど長期的な傾向が観察できます。
 
-    #### 結果の解釈
-    - 時系列グラフ：各タイプのエージェント数の変化と支援率の推移を示しています。
-    - 最終支援率：シミュレーション終了時点での支援の行き渡り具合を示します。
-    - ネットワーク図：エージェント間の関係性と状態を視覚化しています。
+#### 結果の解釈
+- **時系列グラフ**：各タイプのエージェント数の変化とおせっ貝ちゃんと困窮者の割合の推移を示しています。
+- **ノード次数ごとの状態割合**：ネットワーク内のノード（エージェント）の次数（つながりの数）ごとに、各状態（通常、おせっかい、困窮者、被支援）の割合を示しています。
+- **最終統計情報**：シミュレーション終了時点での各状態のエージェント数、割合、支援率、およびおせっ貝ちゃんの影響力を示しています。
 
     このシミュレーションを通じて、小さな支援行動が社会全体にどのように影響を与えるかを観察し、
     効果的な支援システムの構築に向けたヒントを得ることができます。
     """)
 
 
-n_agents = st.slider('エージェント数', 100, 10000, 1000, 100)
-osekkai_rate = st.slider('おせっかい率', 0.001, 0.1, 0.005, 0.001)
+n_agents = st.slider('エージェント数', 100, 10000, 5000, 100)
+osekkai_rate = st.slider('おせっかい率', 0.001, 0.1, 0.001, 0.001)
 needy_rate = st.slider('困窮者率', 0.05, 0.3, 0.157, 0.01)
 support_rate = st.slider('初期支援率', 0.1, 0.5, 0.2, 0.1)
 needy_transition_rate = st.slider('困窮化率', 0.0001, 0.01, 0.001, 0.0001)
@@ -274,13 +272,22 @@ steps = st.slider('シミュレーションステップ', 10, 500, 100, 10)
 
 # Streamlitアプリケーションの更新部分
 if st.button('シミュレーション実行'):
-    model, history = run_simulation(n_agents, osekkai_rate, needy_rate, support_rate, needy_transition_rate, steps)
+    progress_bar = st.progress(0)
+    status_text = st.empty()
     
+    for i in range(10):
+        status_text.text(f"おせっ貝ちゃん増殖中{'.' * (i % 4)}")
+        progress_bar.progress((i + 1) * 10)
+        time.sleep(0.2)
+    model, history = run_simulation(n_agents, osekkai_rate, needy_rate, support_rate, needy_transition_rate, steps)
+
+    status_text.empty()
+    progress_bar.empty()    
     # 新しい包括的可視化関数を使用
     st.plotly_chart(visualize_comprehensive_simulation(history, n_agents), use_container_width=True)
     
     # ネットワーク図は以前と同じ
-    st.plotly_chart(visualize_network_plotly(model), use_container_width=True)
+    st.plotly_chart(visualize_rates_by_degree(model), use_container_width=True)
     
     # 最終的な統計情報を表示
     final_osekkai, final_needy, final_supported, final_support_rate = history[-1]
